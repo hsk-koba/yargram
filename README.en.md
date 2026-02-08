@@ -1,4 +1,4 @@
-# yahman
+# Yargram
 
 A debugging and development library for React. It provides a unified way to handle API calls (REST / GraphQL), log output, and a log window.
 
@@ -6,15 +6,15 @@ A debugging and development library for React. It provides a unified way to hand
 
 ## Structure
 
-- **@yahman/core** — Core utilities: `createPrinter` for logging, `createApi` for API, etc.
-- **@yahman/react** — React Context (`YargramProvider`), hooks `useApi` / `usePrinter` / `useYargram`, and the LogWindow component
+- **@yargram/core** — Core utilities: `createPrinter` for logging, `createApi` for API, etc.
+- **@yargram/react** — React Context (`YargramProvider`), hooks `useApi` / `usePrinter` / `useYargram`, and the LogWindow component
 
 ## Installation
 
 ```bash
-pnpm add @yahman/core @yahman/react
+pnpm add @yargram/core @yargram/react
 # or
-npm install @yahman/core @yahman/react
+npm install @yargram/core @yargram/react
 ```
 
 **Peer dependencies:** React 18 or later.
@@ -24,7 +24,7 @@ npm install @yahman/core @yahman/react
 Wrap your app root with `YargramProvider` and pass `api` and `logWindow`:
 
 ```tsx
-import { YargramProvider, useApi, usePrinter, useYargram } from '@yahman/react';
+import { YargramProvider, useApi, usePrinter, useYargram } from '@yargram/react';
 
 function App() {
   return (
@@ -68,7 +68,7 @@ function MyContent() {
 |------|-------------|
 | `api` | **Required.** `{ provider: 'rest', baseUrl?: string }` or `{ provider: 'graphql', uri?: string, client?: ApolloClient }` |
 | `printer` | Optional. `{ env?: 'local' \| 'sandbox' \| 'staging' \| 'production' }` |
-| `logWindow` | Optional. Pass `{}` to enable the log window (Escape × 5 to open) |
+| `logWindow` | Optional. Pass `{}` to enable the log window (Escape × 5 to open). Use `{ visibleRows?: number }` to set the visible row count. |
 | `auth` | Optional. Password authentication for production/staging only (see below) |
 
 #### REST API
@@ -135,13 +135,14 @@ if (api.provider === 'graphql') {
 
 ### usePrinter
 
-Use `info`, `warn`, and `error` to log; messages appear in the LogWindow “Logs” tab.
+Use `info`, `warn`, and `error` to log; messages appear in the LogWindow “Logs” tab. You can pass strings, or objects/arrays for accordion-style expandable display.
 
 ```tsx
 const printer = usePrinter();
 printer.info('Processing started');
 printer.warn('Cache is stale');
 printer.error('Request failed');
+printer.info({ user: 'Alice', count: 42 });  // Objects shown in accordion
 ```
 
 ---
@@ -199,7 +200,7 @@ To try production-like auth in Storybook, use `auth={{ storybookSimulateProducti
 | Variable | Description |
 |----------|-------------|
 | `ENDPOINT_URL` | Fallback when REST `baseUrl` is not set (core) |
-| `YAHMAN_LOGIN_PASSWORD_HASH` | SHA-256 (hex) of the password for log-window auth |
+| `YAHMAN_LOGIN_PASSWORD_HASH` | SHA-256 (hex) of the password for Yargram log-window auth |
 | `VITE_YAHMAN_LOGIN_PASSWORD_HASH` | Same as above for Vite |
 
 ---
@@ -208,9 +209,9 @@ To try production-like auth in Storybook, use `auth={{ storybookSimulateProducti
 
 ```bash
 pnpm install
-pnpm --filter @yahman/react build
-pnpm --filter @yahman/react test
-pnpm --filter @yahman/react storybook
+pnpm --filter @yargram/react build
+pnpm --filter @yargram/react test
+pnpm --filter @yargram/react storybook
 ```
 
 ---

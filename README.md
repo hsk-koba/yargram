@@ -1,20 +1,20 @@
-# yahman
+# Yargram
 
-React 向けのデバッグ・開発用ライブラリ。API 呼び出し（REST / GraphQL）、ログ出力、ログウィンドウを一括で扱えます。
+React 向けのデバッグ・開発用ライブラリ。API 呼び出し（REST / GraphQL）、ログ出力、ログウィンドウを一括で扱います。
 
 > [English](README.en.md)
 
 ## 構成
 
-- **@yahman/core** — ログ用 `createPrinter`、API 用 `createApi` などコアユーティリティ
-- **@yahman/react** — React 用 Context（`YargramProvider`）、`useApi` / `usePrinter` / `useYargram`、LogWindow コンポーネント
+- **@yargram/core** — ログ用 `createPrinter`、API 用 `createApi` などコアユーティリティ
+- **@yargram/react** — React 用 Context（`YargramProvider`）、`useApi` / `usePrinter` / `useYargram`、LogWindow コンポーネント
 
 ## インストール
 
 ```bash
-pnpm add @yahman/core @yahman/react
+pnpm add @yargram/core @yargram/react
 # または
-npm install @yahman/core @yahman/react
+npm install @yargram/core @yargram/react
 ```
 
 **peerDependencies:** React 18 以上。
@@ -24,7 +24,7 @@ npm install @yahman/core @yahman/react
 アプリのルートで `YargramProvider` でラップし、`api` と `logWindow` を渡します。
 
 ```tsx
-import { YargramProvider, useApi, usePrinter, useYargram } from '@yahman/react';
+import { YargramProvider, useApi, usePrinter, useYargram } from '@yargram/react';
 
 function App() {
   return (
@@ -68,7 +68,7 @@ function MyContent() {
 |-----------|------|
 | `api` | **必須.** `{ provider: 'rest', baseUrl?: string }` または `{ provider: 'graphql', uri?: string, client?: ApolloClient }` |
 | `printer` | 任意. `{ env?: 'local' \| 'sandbox' \| 'staging' \| 'production' }` |
-| `logWindow` | 任意. `{}` を渡すと Escape 5 回でログウィンドウを表示 |
+| `logWindow` | 任意. `{}` を渡すと Escape 5 回でログウィンドウを表示。`{ visibleRows?: number }` で表示行数を指定可能 |
 | `auth` | 任意. 本番・ステージングのみパスワード認証する場合に指定（後述） |
 
 #### REST API
@@ -135,13 +135,14 @@ if (api.provider === 'graphql') {
 
 ### usePrinter
 
-`info` / `warn` / `error` でログを出し、内容は LogWindow の「Logs」タブに表示されます。
+`info` / `warn` / `error` でログを出し、内容は LogWindow の「Logs」タブに表示されます。文字列のほか、オブジェクトや配列を渡すとアコーディオンで展開表示されます。
 
 ```tsx
 const printer = usePrinter();
 printer.info('処理を開始しました');
 printer.warn('キャッシュが古いです');
 printer.error('リクエストに失敗しました');
+printer.info({ user: 'Alice', count: 42 });  // オブジェクトはアコーディオン表示
 ```
 
 ---
@@ -200,7 +201,7 @@ Storybook で本番相当の認証を試す場合は `auth={{ storybookSimulateP
 | 変数 | 説明 |
 |------|------|
 | `ENDPOINT_URL` | REST の baseUrl 未指定時のフォールバック（core） |
-| `YAHMAN_LOGIN_PASSWORD_HASH` | 認証用パスワードの SHA-256（hex） |
+| `YAHMAN_LOGIN_PASSWORD_HASH` | Yargram ログウィンドウ認証用パスワードの SHA-256（hex） |
 | `VITE_YAHMAN_LOGIN_PASSWORD_HASH` | 上記の Vite 向け |
 
 ---
@@ -209,9 +210,9 @@ Storybook で本番相当の認証を試す場合は `auth={{ storybookSimulateP
 
 ```bash
 pnpm install
-pnpm --filter @yahman/react build
-pnpm --filter @yahman/react test
-pnpm --filter @yahman/react storybook
+pnpm --filter @yargram/react build
+pnpm --filter @yargram/react test
+pnpm --filter @yargram/react storybook
 ```
 
 ---

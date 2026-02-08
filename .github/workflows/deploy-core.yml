@@ -1,0 +1,56 @@
+name: Deploy Core
+
+on:
+  # 手動で実行ボタンを押した時に起動（誤公開を防ぐため最初はこれがおすすめ）
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # バージョン変更をGitHubに書き戻すために必要
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      # 1. ユーザー（Git）の設定（コミットするために必要）
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      # 2. 依存関係のインストール
+      - name: Install dependencies
+        run: pnpm install
+
+      # 3. バージョンアップ実行 (例: 1.0.0 -> 1.0.1)
+      # --workspace を指定することでモノレポ内の特定のパッケージだけ上げられます
+      - name: Bump Version
+        run: |
+          npm version ${{ github.event.inputs.version_type }} --workspace=@yargram/core
+        
+      # 4. 変更をGitHubにプッシュ（package.jsonの更新を保存）
+      - name: Push changes
+        run: git push origin main --tags
+
+      # 5. NPMへ公開
+      - name: Publish to NPM
+        run: npm publish --workspace=@yargram/core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
