@@ -147,28 +147,6 @@ printer.info({ user: 'Alice', count: 42 });  // オブジェクトはアコー�
 
 ---
 
-### useYargram
-
-ログウィンドウの開閉とエントリ取得に使います。
-
-```tsx
-const {
-  openLogWindow,
-  closeLogWindow,
-  isLogWindowOpen,
-  logEntries,
-  networkEntries,
-  addLogEntry,
-  addNetworkEntry,
-} = useYargram();
-```
-
-- `openLogWindow()` — ログウィンドウを開く
-- `closeLogWindow()` — ログウィンドウを閉じる
-- `logEntries` / `networkEntries` — 表示用のログ・ネットワーク一覧（通常は `usePrinter` / `useApi` 連携で自動追加）
-
----
-
 ### 認証（本番・ステージングのみ）
 
 `auth` を渡すと、**NODE_ENV が `production` または `staging` のときだけ** LogWindow を開いた際にパスワード入力が求められます。開発時は認証なしで LogWindow が使えます。

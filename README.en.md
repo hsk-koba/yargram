@@ -147,28 +147,6 @@ printer.info({ user: 'Alice', count: 42 });  // Objects shown in accordion
 
 ---
 
-### useYargram
-
-Use for opening/closing the log window and reading entries.
-
-```tsx
-const {
-  openLogWindow,
-  closeLogWindow,
-  isLogWindowOpen,
-  logEntries,
-  networkEntries,
-  addLogEntry,
-  addNetworkEntry,
-} = useYargram();
-```
-
-- `openLogWindow()` — Open the log window
-- `closeLogWindow()` — Close the log window
-- `logEntries` / `networkEntries` — Log and network lists for display (usually populated automatically via `usePrinter` / `useApi`)
-
----
-
 ### Authentication (production / staging only)
 
 When `auth` is passed, **only when NODE_ENV is `production` or `staging`** will opening the LogWindow require a password. In development, the log window works without authentication.
