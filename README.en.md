@@ -6,7 +6,7 @@ A debugging and development library for React. It provides a unified way to hand
 
 ## Structure
 
-- **@yargram/core** — Core utilities: `createPrinter` for logging, `createApi` for API, etc.
+- **@yargram/core** — Core utilities: `createPrinter` for logging, `createApi` for API, `mergeFragmentGql` for GraphQL query+fragment, and `SecureStorage` for time-limited, encryptable localStorage
 - **@yargram/react** — React Context (`YargramProvider`), hooks `useApi` / `usePrinter` / `useYargram`, and the LogWindow component
 
 ## Installation
@@ -147,6 +147,66 @@ printer.info({ user: 'Alice', count: 42 });  // Objects shown in accordion
 
 ---
 
+### @yargram/core utilities
+
+#### mergeFragmentGql (GraphQL)
+
+Merges a query string and one or more fragment strings into a single GraphQL document (`DocumentNode`). The result is parsed with `graphql-tag`’s `gql`, so you can pass it directly to Apollo Client. You can pass multiple fragments.
+
+```ts
+import { mergeFragmentGql } from '@yargram/core';
+
+const query = `
+  query GetUser($id: ID!) {
+    user(id: $id) {
+      ...UserFields
+      ...UserStats
+    }
+  }
+`;
+const fragmentUser = `
+  fragment UserFields on User {
+    id
+    name
+    email
+  }
+`;
+const fragmentStats = `
+  fragment UserStats on User {
+    createdAt
+    postCount
+  }
+`;
+
+// Single fragment
+const doc1 = mergeFragmentGql(query, fragmentUser);
+// Multiple fragments
+const document = mergeFragmentGql(query, fragmentUser, fragmentStats);
+// Use with useApi().ransack({ query: document }) etc.
+```
+
+#### SecureStorage (time-limited, encryptable localStorage)
+
+Provides `setItem` / `getItem` / `removeItem` with optional TTL and obfuscation so values are not stored in plain text.
+
+```ts
+import { SecureStorage } from '@yargram/core';
+
+const store = new SecureStorage({
+  secret: 'my-secret-key',   // Used for obfuscation (optional)
+  ttlMs: 7 * 24 * 60 * 60 * 1000,  // Default TTL (default 7 days)
+  prefix: '__myapp_secure__',       // Optional key prefix
+});
+
+store.setItem('token', 'abc123');
+store.setItem('refresh', 'xyz', 30 * 60 * 1000);  // Valid for 30 minutes only
+
+const token = store.getItem('token');  // Returns value if within TTL, or null (entry is removed)
+store.removeItem('token');
+```
+
+---
+
 ### Authentication (production / staging only)
 
 When `auth` is passed, **only when NODE_ENV is `production` or `staging`** will opening the LogWindow require a password. In development, the log window works without authentication.
@@ -177,7 +237,7 @@ To try production-like auth in Storybook, use `auth={{ storybookSimulateProducti
 
 | Variable | Description |
 |----------|-------------|
-| `ENDPOINT_URL` | Fallback when REST `baseUrl` is not set (core) |
+| `ENDPOINT_URL` | Fallback when REST `baseUrl` is not set (@yargram/core) |
 | `YAHMAN_LOGIN_PASSWORD_HASH` | SHA-256 (hex) of the password for Yargram log-window auth |
 | `VITE_YAHMAN_LOGIN_PASSWORD_HASH` | Same as above for Vite |
 

@@ -6,7 +6,7 @@ React 向けのデバッグ・開発用ライブラリ。API 呼び出し（REST
 
 ## 構成
 
-- **@yargram/core** — ログ用 `createPrinter`、API 用 `createApi` などコアユーティリティ
+- **@yargram/core** — ログ用 `createPrinter`、API 用 `createApi`、GraphQL 用 `mergeFragmentGql`、時間限定・暗号化可能な `SecureStorage` などコアユーティリティ
 - **@yargram/react** — React 用 Context（`YargramProvider`）、`useApi` / `usePrinter` / `useYargram`、LogWindow コンポーネント
 
 ## インストール
@@ -147,6 +147,66 @@ printer.info({ user: 'Alice', count: 42 });  // オブジェクトはアコー�
 
 ---
 
+### @yargram/core のユーティリティ
+
+#### mergeFragmentGql（GraphQL）
+
+クエリ文字列と 1 つ以上の Fragment 文字列を 1 つの GraphQL ドキュメント（`DocumentNode`）に結合します。`graphql-tag` の `gql` でパースされた結果を返すため、Apollo Client などにそのまま渡せます。複数の Fragment を渡すことも可能です。
+
+```ts
+import { mergeFragmentGql } from '@yargram/core';
+
+const query = `
+  query GetUser($id: ID!) {
+    user(id: $id) {
+      ...UserFields
+      ...UserStats
+    }
+  }
+`;
+const fragmentUser = `
+  fragment UserFields on User {
+    id
+    name
+    email
+  }
+`;
+const fragmentStats = `
+  fragment UserStats on User {
+    createdAt
+    postCount
+  }
+`;
+
+// 1 つの Fragment
+const doc1 = mergeFragmentGql(query, fragmentUser);
+// 複数の Fragment
+const document = mergeFragmentGql(query, fragmentUser, fragmentStats);
+// useApi().ransack({ query: document }) などで利用
+```
+
+#### SecureStorage（時間限定・暗号化可能な localStorage）
+
+`setItem` / `getItem` / `removeItem` の API で、有効期限付き・解読しにくい形式で localStorage に保存します。
+
+```ts
+import { SecureStorage } from '@yargram/core';
+
+const store = new SecureStorage({
+  secret: 'my-secret-key',   // 暗号化に使用（省略時も簡易難読化）
+  ttlMs: 7 * 24 * 60 * 60 * 1000,  // デフォルト有効期限（省略時は 7 日）
+  prefix: '__myapp_secure__',      // 任意。キー接頭辞
+});
+
+store.setItem('token', 'abc123');
+store.setItem('refresh', 'xyz', 30 * 60 * 1000);  // 30分だけ有効
+
+const token = store.getItem('token');  // 有効期限内なら値を返す。期限切れなら null（自動削除）
+store.removeItem('token');
+```
+
+---
+
 ### 認証（本番・ステージングのみ）
 
 `auth` を渡すと、**NODE_ENV が `production` または `staging` のときだけ** LogWindow を開いた際にパスワード入力が求められます。開発時は認証なしで LogWindow が使えます。
@@ -178,7 +238,7 @@ Storybook で本番相当の認証を試す場合は `auth={{ storybookSimulateP
 
 | 変数 | 説明 |
 |------|------|
-| `ENDPOINT_URL` | REST の baseUrl 未指定時のフォールバック（core） |
+| `ENDPOINT_URL` | REST の baseUrl 未指定時のフォールバック（@yargram/core） |
 | `YAHMAN_LOGIN_PASSWORD_HASH` | Yargram ログウィンドウ認証用パスワードの SHA-256（hex） |
 | `VITE_YAHMAN_LOGIN_PASSWORD_HASH` | 上記の Vite 向け |
 
