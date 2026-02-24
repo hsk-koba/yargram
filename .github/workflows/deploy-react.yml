@@ -45,17 +45,20 @@ jobs:
         run: pnpm install
 
       # 3. バージョンアップ実行 (例: 1.0.0 -> 1.0.1)
-      # --workspace を指定することでモノレポ内の特定のパッケージだけ上げられます
       - name: Bump Version
         run: |
-          npm version ${{ github.event.inputs.version_type }} --workspace=@yargram/react
-        
+          cd packages/react && pnpm version ${{ github.event.inputs.version_type }}
+          NEW_VERSION=$(node -p "require('./packages/react/package.json').version")
+          git add packages/react/package.json
+          git commit -m "chore(react): release $NEW_VERSION"
+          git tag "react@$NEW_VERSION"
+
       # 4. 変更をGitHubにプッシュ（package.jsonの更新を保存）
       - name: Push changes
         run: git push origin main --tags
 
       # 5. NPMへ公開
       - name: Publish to NPM
-        run: npm publish --workspace=@yargram/react
+        run: pnpm --filter @yargram/react publish --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
