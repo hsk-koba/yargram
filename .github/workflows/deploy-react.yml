@@ -48,6 +48,7 @@ jobs:
       - name: Bump Version
         run: |
           cd packages/react && pnpm version ${{ github.event.inputs.version_type }}
+          cd ../..
           NEW_VERSION=$(node -p "require('./packages/react/package.json').version")
           git add packages/react/package.json
           git commit -m "chore(react): release $NEW_VERSION"
