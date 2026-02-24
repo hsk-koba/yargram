@@ -62,6 +62,8 @@ jobs:
 
       # 5. NPMへ公開
       - name: Publish to NPM
-        run: pnpm --filter @yargram/react publish --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
+          pnpm --filter @yargram/react publish --no-git-checks
