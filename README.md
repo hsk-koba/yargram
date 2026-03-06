@@ -257,4 +257,4 @@ pnpm --filter @yargram/react storybook
 
 ## ライセンス
 
-ISC
+MIT
