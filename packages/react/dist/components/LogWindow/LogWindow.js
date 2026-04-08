@@ -20,7 +20,10 @@ function downloadBlob(blob, filename) {
     URL.revokeObjectURL(url);
 }
 const CLOSE_ANIMATION_MS = 200;
-export function LogWindow({ entries = [], networkEntries = [], defaultTab = 'logs', onTabChange, height, className = '', draggable = false, defaultPosition, animateOnOpen = false, onClose, onLogout, showLogin = false, loginTitle = 'Login', onLogin, loginError, onClearLoginError, }) {
+/** 1行あたりの高さ（.logWindowEntry の min-height 28px + padding 6*2） */
+const LOG_ROW_HEIGHT_PX = 40;
+const LOG_PANEL_PADDING_V = 16;
+export function LogWindow({ entries = [], networkEntries = [], defaultTab = 'logs', onTabChange, height, visibleRows, className = '', draggable = false, defaultPosition, animateOnOpen = false, onClose, onLogout, showLogin = false, loginTitle = 'Login', onLogin, loginError, onClearLoginError, }) {
     const [activeTab, setActiveTab] = useState(defaultTab);
     const [isClosing, setIsClosing] = useState(false);
     const [unreadLogsCount, setUnreadLogsCount] = useState(0);
@@ -29,6 +32,8 @@ export function LogWindow({ entries = [], networkEntries = [], defaultTab = 'log
     const closeTimeoutRef = useRef(null);
     const prevEntriesLengthRef = useRef(entries.length);
     const prevNetworkEntriesLengthRef = useRef(networkEntries.length);
+    const logsPanelRef = useRef(null);
+    const networksPanelRef = useRef(null);
     const [position, setPosition] = useState(() => draggable ? defaultPosition ?? { x: 100, y: 100 } : { x: 0, y: 0 });
     const dragStartRef = useRef(null);
     useEffect(() => {
@@ -43,6 +48,16 @@ export function LogWindow({ entries = [], networkEntries = [], defaultTab = 'log
         }
         prevNetworkEntriesLengthRef.current = networkEntries.length;
     }, [entries.length, networkEntries.length, activeTab]);
+    useEffect(() => {
+        const el = logsPanelRef.current;
+        if (el)
+            el.scrollTop = el.scrollHeight;
+    }, [entries.length]);
+    useEffect(() => {
+        const el = networksPanelRef.current;
+        if (el)
+            el.scrollTop = el.scrollHeight;
+    }, [networkEntries.length]);
     const handleTab = (tab) => {
         setActiveTab(tab);
         if (tab === 'logs')
@@ -100,7 +115,10 @@ export function LogWindow({ entries = [], networkEntries = [], defaultTab = 'log
     }, [onClose, isClosing]);
     const handleExportCsv = useCallback(() => {
         const header = 'level,message,source\n';
-        const rows = entries.map((e) => [e.level, escapeCsvCell(e.message), escapeCsvCell(e.source)].join(','));
+        const rows = entries.map((e) => {
+            const msgStr = typeof e.message === 'string' ? e.message : JSON.stringify(e.message);
+            return [e.level, escapeCsvCell(msgStr), escapeCsvCell(e.source)].join(',');
+        });
         const csv = header + rows.join('\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
         downloadBlob(blob, `logs-${Date.now()}.csv`);
@@ -113,7 +131,11 @@ export function LogWindow({ entries = [], networkEntries = [], defaultTab = 'log
         downloadBlob(blob, `logs-${Date.now()}.json`);
         setExportDialogOpen(false);
     }, [entries, networkEntries]);
-    const bodyStyle = height != null ? { maxHeight: typeof height === 'number' ? `${height}px` : height } : undefined;
+    const bodyStyle = visibleRows != null
+        ? { maxHeight: visibleRows * LOG_ROW_HEIGHT_PX + LOG_PANEL_PADDING_V }
+        : height != null
+            ? { maxHeight: typeof height === 'number' ? `${height}px` : height }
+            : undefined;
     const rootStyle = draggable
         ? {
             position: 'fixed',
@@ -140,5 +162,5 @@ export function LogWindow({ entries = [], networkEntries = [], defaultTab = 'log
         .trim();
     return (_jsx("div", { className: rootClassName.trim(), ...(rootStyle != null ? { style: rootStyle } : {}), children: _jsxs("div", { className: innerClassName, children: [_jsxs("header", { className: `logWindowHeader ${draggable ? 'logWindowHeaderDraggable' : ''} ${showLogin ? 'logWindowHeaderLoginOnly' : ''}`, onMouseDown: handleHeaderMouseDown, role: draggable ? 'button' : undefined, tabIndex: draggable ? 0 : undefined, "aria-label": draggable ? 'Move window' : undefined, children: [!showLogin && (_jsxs("div", { className: "logWindowTabs", children: [_jsxs("button", { type: "button", className: `logWindowTab ${activeTab === 'logs' ? 'logWindowTabActive' : ''}`, onClick: () => handleTab('logs'), onMouseDown: (e) => draggable && e.stopPropagation(), "aria-pressed": activeTab === 'logs', children: [_jsx(Terminal, { className: "logWindowTabIcon logWindowTabIconTerminal", size: 14, "aria-hidden": true }), "Logs", activeTab !== 'logs' && unreadLogsCount > 0 && (_jsx("span", { className: "logWindowTabBadge", "aria-label": `New logs: ${unreadLogsCount}`, children: unreadLogsCount > 99 ? '99+' : unreadLogsCount }))] }), _jsxs("button", { type: "button", className: `logWindowTab ${activeTab === 'networks' ? 'logWindowTabActive' : ''}`, onClick: () => handleTab('networks'), onMouseDown: (e) => draggable && e.stopPropagation(), "aria-pressed": activeTab === 'networks', children: [_jsx(Wifi, { className: "logWindowTabIcon logWindowTabIconWifi", size: 14, "aria-hidden": true }), "Networks", activeTab !== 'networks' && unreadNetworksCount > 0 && (_jsx("span", { className: "logWindowTabBadge", "aria-label": `New networks: ${unreadNetworksCount}`, children: unreadNetworksCount > 99 ? '99+' : unreadNetworksCount }))] })] })), showLogin && _jsx("span", { className: "logWindowHeaderLoginTitle", children: loginTitle }), onLogout && !showLogin && (_jsxs("button", { type: "button", className: "logWindowLogoutButton", onClick: onLogout, "aria-label": "Log out", title: "Log out", children: [_jsx(LogOut, { size: 14, "aria-hidden": true }), _jsx("span", { children: "Log out" })] })), onClose ? (_jsx("button", { type: "button", className: "logWindowCloseButton", onClick: handleCloseClick, disabled: isClosing, "aria-label": "close", title: "close", children: _jsx(X, { size: 16, fill: "currentColor", "aria-hidden": true }) })) : (_jsx("span", { className: "logWindowIndicator", title: "Recording / Active", children: _jsx(X, { size: 16, fill: "currentColor", "aria-hidden": true }) }))] }), _jsx("div", { className: "logWindowBody", style: bodyStyle, children: showLogin && onLogin ? (_jsx(LoginForm, { title: loginTitle, onLogin: onLogin, errorMessage: loginError, onClearError: onClearLoginError })) : (_jsxs("div", { className: "logWindowBodySlider", style: {
                             transform: activeTab === 'logs' ? 'translateX(0)' : 'translateX(-50%)',
-                        }, children: [_jsx("div", { className: "logWindowBodyPanel", children: entries.map((entry) => (_jsx(LogEntryRow, { entry: entry }, entry.id))) }), _jsx("div", { className: "logWindowBodyPanel", children: networkEntries.length > 0 ? (networkEntries.map((entry) => (_jsx(NetworkEntryRow, { entry: entry }, entry.id)))) : (_jsx("div", { className: "logWindowEntry logWindowEntryInfo", style: { color: 'var(--logw-text-muted)' }, children: "Network requests will appear here." })) })] })) }), !showLogin && (_jsx("footer", { className: "logWindowFooter", children: _jsxs("button", { type: "button", className: "logWindowExportButton", onClick: () => setExportDialogOpen(true), "aria-haspopup": "dialog", "aria-expanded": exportDialogOpen, children: [_jsx(Download, { size: 14, "aria-hidden": true }), "Export"] }) })), exportDialogOpen && (_jsx("div", { className: "logWindowExportOverlay", role: "dialog", "aria-modal": "true", "aria-labelledby": "logWindowExportDialogTitle", children: _jsxs("div", { className: "logWindowExportDialog", children: [_jsx("h3", { id: "logWindowExportDialogTitle", className: "logWindowExportDialogTitle", children: "Export format" }), _jsx("p", { className: "logWindowExportDialogDescription", children: "CSV \u3067\u30A8\u30AF\u30B9\u30DD\u30FC\u30C8\u3057\u307E\u3059\u304B\u3001JSON \u3067\u30A8\u30AF\u30B9\u30DD\u30FC\u30C8\u3057\u307E\u3059\u304B\uFF1F" }), _jsxs("div", { className: "logWindowExportDialogActions", children: [_jsxs("button", { type: "button", className: "logWindowExportFormatButton", onClick: handleExportCsv, children: [_jsx(FileText, { size: 18, "aria-hidden": true }), "CSV"] }), _jsxs("button", { type: "button", className: "logWindowExportFormatButton", onClick: handleExportJson, children: [_jsx(FileJson, { size: 18, "aria-hidden": true }), "JSON"] })] }), _jsx("button", { type: "button", className: "logWindowExportDialogCancel", onClick: () => setExportDialogOpen(false), children: "Cancel" })] }) }))] }) }));
+                        }, children: [_jsx("div", { ref: logsPanelRef, className: "logWindowBodyPanel", children: entries.map((entry) => (_jsx(LogEntryRow, { entry: entry }, entry.id))) }), _jsx("div", { ref: networksPanelRef, className: "logWindowBodyPanel", children: networkEntries.length > 0 ? (networkEntries.map((entry) => (_jsx(NetworkEntryRow, { entry: entry }, entry.id)))) : (_jsx("div", { className: "logWindowEntry logWindowEntryInfo", style: { color: 'var(--logw-text-muted)' }, children: "Network requests will appear here." })) })] })) }), !showLogin && (_jsx("footer", { className: "logWindowFooter", children: _jsxs("button", { type: "button", className: "logWindowExportButton", onClick: () => setExportDialogOpen(true), "aria-haspopup": "dialog", "aria-expanded": exportDialogOpen, children: [_jsx(Download, { size: 14, "aria-hidden": true }), "Export"] }) })), exportDialogOpen && (_jsx("div", { className: "logWindowExportOverlay", role: "dialog", "aria-modal": "true", "aria-labelledby": "logWindowExportDialogTitle", children: _jsxs("div", { className: "logWindowExportDialog", children: [_jsx("h3", { id: "logWindowExportDialogTitle", className: "logWindowExportDialogTitle", children: "Export format" }), _jsx("p", { className: "logWindowExportDialogDescription", children: "CSV \u3067\u30A8\u30AF\u30B9\u30DD\u30FC\u30C8\u3057\u307E\u3059\u304B\u3001JSON \u3067\u30A8\u30AF\u30B9\u30DD\u30FC\u30C8\u3057\u307E\u3059\u304B\uFF1F" }), _jsxs("div", { className: "logWindowExportDialogActions", children: [_jsxs("button", { type: "button", className: "logWindowExportFormatButton", onClick: handleExportCsv, children: [_jsx(FileText, { size: 18, "aria-hidden": true }), "CSV"] }), _jsxs("button", { type: "button", className: "logWindowExportFormatButton", onClick: handleExportJson, children: [_jsx(FileJson, { size: 18, "aria-hidden": true }), "JSON"] })] }), _jsx("button", { type: "button", className: "logWindowExportDialogCancel", onClick: () => setExportDialogOpen(false), children: "Cancel" })] }) }))] }) }));
 }

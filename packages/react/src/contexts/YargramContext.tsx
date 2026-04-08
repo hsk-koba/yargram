@@ -14,15 +14,22 @@ import {
   ApolloClient,
   ApolloProvider,
   InMemoryCache,
+  HttpLink,
 } from '@apollo/client';
 import { getOperationAST, print } from 'graphql';
 import { ApiProvider, ApiContext } from './ApiContext';
-import type { RestApiContextValue, GraphqlApiContextValue } from './ApiContext';
+import type {
+  RestApiContextValue,
+  GraphqlApiContextValue,
+  YargramGraphqlQueryOptions,
+  YargramGraphqlMutationOptions,
+} from './ApiContext';
 import { PrinterProvider } from './PrinterContext';
 import { useLogWindowShortcut } from '../hooks/useLogWindowShortcut';
 import { LogWindow } from '../components/LogWindow/LogWindow';
 import type { LogEntry, LogMessage, NetworkEntry } from '../components/LogWindow/types';
 import type { Env } from '@yargram/core';
+import { base64ToArrayBuffer, decryptText, importPrivateKey } from '../crypto/rsaOaep';
 import type {
   ApolloClient as ApolloClientType,
   NormalizedCacheObject,
@@ -111,38 +118,15 @@ function persistAuth(value: boolean, ttlMs: number = DEFAULT_TOKEN_TTL_MS) {
   }
 }
 
-/** デフォルトパスワード "12345678" の SHA-256 (hex) */
-const DEFAULT_PASSWORD_HASH =
-  'ef797c8118f02dfb649607dd5d3f8c7623048c9c063d532cc95c5ed7a898a64f';
+type YargramEncryptedData =
+  | { format: 'base64'; value: string }
+  | { format: 'arrayBuffer'; value: ArrayBuffer };
 
-/**
- * 環境変数からログイン用パスワードハッシュを取得。未設定時はデフォルト（12345678 の SHA-256）。
- * パスワードを変更する場合は YAHMAN_LOGIN_PASSWORD_HASH または VITE_YAHMAN_LOGIN_PASSWORD_HASH に、
- * 希望するパスワードの SHA-256 ハッシュ（hex）を設定する。
- */
-function getAcceptedPasswordHash(): string {
-  const fromProcess =
-    typeof process !== 'undefined' && process.env?.YAHMAN_LOGIN_PASSWORD_HASH
-      ? String(process.env.YAHMAN_LOGIN_PASSWORD_HASH).trim()
-      : '';
-  type MetaEnv = { env?: { VITE_YAHMAN_LOGIN_PASSWORD_HASH?: string } };
-  const meta = typeof import.meta !== 'undefined' ? (import.meta as MetaEnv) : null;
-  const viteHash = meta?.env?.VITE_YAHMAN_LOGIN_PASSWORD_HASH;
-  const fromMeta = viteHash ? String(viteHash).trim() : '';
-  const fromEnv = fromProcess || fromMeta;
-  return fromEnv || DEFAULT_PASSWORD_HASH;
-}
-
-/** 文字列を SHA-256 でハッシュし hex 文字列で返す */
-async function sha256Hex(str: string): Promise<string> {
-  const buf = new TextEncoder().encode(str);
-  const hash =
-    typeof crypto !== 'undefined' && crypto.subtle
-      ? await crypto.subtle.digest('SHA-256', buf)
-      : new Uint8Array(0);
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+async function resolveEncryptedData(data: YargramEncryptedData | (() => Promise<YargramEncryptedData>)) {
+  const resolved = typeof data === 'function' ? await data() : data;
+  return resolved.format === 'base64'
+    ? base64ToArrayBuffer(resolved.value)
+    : resolved.value;
 }
 
 function resolveBody(body?: BodyInit | Record<string, unknown>): BodyInit | undefined {
@@ -159,13 +143,64 @@ function resolveBody(body?: BodyInit | Record<string, unknown>): BodyInit | unde
   return JSON.stringify(body);
 }
 
+function mergeHeaders(base?: HeadersInit, override?: HeadersInit): Headers | undefined {
+  if (!base && !override) return undefined;
+  const h = new Headers(base);
+  if (override) {
+    new Headers(override).forEach((value, key) => {
+      h.set(key, value);
+    });
+  }
+  return h;
+}
+
+function headersInitToRecord(headers?: HeadersInit): Record<string, string> | undefined {
+  if (!headers) return undefined;
+  const record: Record<string, string> = {};
+  new Headers(headers).forEach((value, key) => {
+    record[key] = value;
+  });
+  return record;
+}
+
+function normalizeGraphqlOptions<T extends { context?: any; noCache?: boolean; cache?: RequestCache; dedupe?: boolean; fetchPolicy?: any }>(
+  options: T
+): Omit<T, 'noCache' | 'cache' | 'dedupe'> {
+  const { noCache, cache, dedupe, context, ...rest } = options;
+  const next: any = { ...rest };
+
+  if (noCache === true && next.fetchPolicy == null) {
+    next.fetchPolicy = 'no-cache';
+  }
+
+  if (cache != null || dedupe != null) {
+    next.context = {
+      ...(context ?? {}),
+      ...(dedupe != null ? { queryDeduplication: dedupe } : {}),
+      ...(cache != null
+        ? {
+            fetchOptions: {
+              ...((context as any)?.fetchOptions ?? {}),
+              cache,
+            },
+          }
+        : {}),
+    };
+  } else if (context != null) {
+    next.context = context;
+  }
+
+  return next;
+}
+
 /** Api 設定（ApiProvider の props から children を除いたもの） */
 type YargramApiConfig =
-  | { provider: 'rest'; baseUrl?: string }
+  | { provider: 'rest'; baseUrl?: string; headers?: HeadersInit }
   | {
       provider: 'graphql';
       uri?: string;
       client?: ApolloClient<NormalizedCacheObject>;
+      headers?: HeadersInit;
     };
 
 /** Printer 設定 */
@@ -181,21 +216,28 @@ type YargramLogWindowConfig = {
 
 /** 認証設定。本番のみログインを要求する場合は true、カスタム時はオブジェクト */
 type YargramAuthConfig =
-  | true
   | {
       /** 本番時のみ認証（デフォルト true） */
       productionOnly?: boolean;
       /** Storybook 時のみ本番として扱う（ログイン要求する） */
       storybookSimulateProduction?: boolean;
-      /** カスタム認証（指定時は onLogin で検証。未指定時は passwordHash または env でハッシュ比較） */
-      onLogin?: (password: string) => Promise<void>;
       /** ログインウィンドウのタイトル */
       loginTitle?: string;
       /**
-       * ログイン用パスワードの SHA-256 ハッシュ（hex）。指定時は env より優先。
-       * 未指定時は YAHMAN_LOGIN_PASSWORD_HASH / VITE_YAHMAN_LOGIN_PASSWORD_HASH、それも無ければデフォルト（12345678 のハッシュ）。
+       * 公開鍵（SPKI DER の base64。YARGRAM_PUBLIC_KEY_DER_BASE64 を想定）。
+       * サーバー側の暗号化で利用する想定。
        */
-      passwordHash?: string;
+      publicKey: string;
+      /**
+       * サーバーから取得した暗号化データ。
+       * base64 か ArrayBuffer を指定（または遅延取得関数）。
+       */
+      encryptedData: YargramEncryptedData | (() => Promise<YargramEncryptedData>);
+      /**
+       * 復号後のプレーンテキストを受け取って検証/初期化する（成功で resolve）。
+       * 未指定の場合、復号できた時点で認証成功とみなす。
+       */
+      onDecrypted?: (plaintext: string) => Promise<void>;
       /**
        * ログイン後のトークン有効期限（ミリ秒）。未指定時は 7 日。
        */
@@ -210,6 +252,7 @@ type YargramContextValue = {
   logEntries: LogEntry[];
   networkEntries: NetworkEntry[];
   isLogWindowOpen: boolean;
+  publicKey?: string;
 };
 
 const YargramContext = createContext<YargramContextValue | null>(null);
@@ -223,9 +266,8 @@ export type YargramProviderProps = {
   /** LogWindow を Escape で出せるようにする設定。省略時は LogWindow 機能なし */
   logWindow?: YargramLogWindowConfig;
   /**
-   * 認証を有効にする。true のとき本番（NODE_ENV=production/staging）のみログインウィンドウを表示。
-   * オブジェクトで productionOnly / onLogin / loginTitle / passwordHash を指定可能。
-   * パスワードハッシュは auth.passwordHash → env（YAHMAN_LOGIN_PASSWORD_HASH 等）→ デフォルト（12345678 の SHA-256）の順で解決される。
+   * 認証を有効にする。指定時は本番（NODE_ENV=production/staging）でログイン（秘密鍵復号）を要求する。
+   * ログインは「秘密鍵ファイル（PKCS#8 PEM）で暗号化データを復号できたら成功」として扱う。
    */
   auth?: YargramAuthConfig;
 };
@@ -255,7 +297,7 @@ function LogWindowGate({
   defaultPosition: { x: number; y: number };
   loginTitle?: string;
   isAuthenticated: boolean;
-  login: (password: string) => Promise<void>;
+  login: (pem: string) => Promise<void>;
   logout: () => void;
   loginError: string | undefined;
   clearLoginError: () => void;
@@ -311,7 +353,7 @@ export function YargramProvider({
   const simulateProduction =
     auth && typeof auth === 'object' && isStorybook() && storybookSimulateProduction(auth.storybookSimulateProduction);
   const requiresAuth =
-    auth && (auth === true || (typeof auth === 'object' && (auth.productionOnly !== false)))
+    auth && typeof auth === 'object' && (auth.productionOnly !== false)
       ? isProductionOrStaging() || !!simulateProduction
       : false;
   const [isAuthenticated, setIsAuthenticated] = useState(() =>
@@ -324,48 +366,48 @@ export function YargramProvider({
     setIsAuthenticated(loadPersistedAuth());
   }, [requiresAuth]);
 
-  const onLoginProp = auth && typeof auth === 'object' ? auth.onLogin : undefined;
-  const authPasswordHash =
-    auth && typeof auth === 'object' && auth.passwordHash?.trim()
-      ? auth.passwordHash.trim()
-      : '';
+  const encryptedData = auth && typeof auth === 'object' ? auth.encryptedData : undefined;
+  const publicKey = auth && typeof auth === 'object' ? auth.publicKey : undefined;
+  const onDecrypted = auth && typeof auth === 'object' ? auth.onDecrypted : undefined;
   const tokenTtlMs =
     auth && typeof auth === 'object' && auth.tokenTtlMs != null
       ? auth.tokenTtlMs
       : DEFAULT_TOKEN_TTL_MS;
 
   const login = useCallback(
-    async (password: string) => {
-      if (onLoginProp) {
-        await onLoginProp(password);
-        setLoginError(undefined);
-        setIsAuthenticated(true);
-        persistAuth(true, tokenTtlMs);
-      } else {
-        if (!password) throw new Error('Password is required.');
-        const inputHash = await sha256Hex(password);
-        const accepted =
-          authPasswordHash || getAcceptedPasswordHash();
-        if (inputHash.toLowerCase() !== accepted.toLowerCase()) {
-          setLoginError('Invalid password.');
-        } else {
-          setLoginError(undefined);
-          setIsAuthenticated(true);
-          persistAuth(true, tokenTtlMs);
-        }
+    async (pem: string) => {
+      if (!pem) throw new Error('Private key is required.');
+      if (/BEGIN RSA PRIVATE KEY/.test(pem)) {
+        throw new Error('This looks like PKCS#1 (BEGIN RSA PRIVATE KEY). Please provide PKCS#8 (BEGIN PRIVATE KEY).');
       }
+      if (!/BEGIN PRIVATE KEY/.test(pem)) {
+        throw new Error('Not a PKCS#8 private key PEM. Expected BEGIN PRIVATE KEY.');
+      }
+      if (!encryptedData) {
+        throw new Error('auth.encryptedData is required for decryption login.');
+      }
+
+      const key = await importPrivateKey(pem);
+      const ciphertext = await resolveEncryptedData(encryptedData);
+      const plaintext = await decryptText(key, ciphertext);
+      if (onDecrypted) {
+        await onDecrypted(plaintext);
+      }
+      setLoginError(undefined);
+      setIsAuthenticated(true);
+      persistAuth(true, tokenTtlMs);
     },
-    [onLoginProp, authPasswordHash, tokenTtlMs]
+    [encryptedData, onDecrypted, tokenTtlMs]
   );
   const logout = useCallback(() => {
     setIsAuthenticated(false);
     persistAuth(false);
   }, []);
   const handleLogin = useCallback(
-    async (password: string) => {
+    async (pem: string) => {
       setLoginError(undefined);
       try {
-        await login(password);
+        await login(pem);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Login failed.';
         setLoginError(message);
@@ -417,6 +459,7 @@ export function YargramProvider({
     api.provider === 'rest'
       ? (api.baseUrl ?? (typeof process !== 'undefined' ? process.env?.ENDPOINT_URL : '') ?? '')
       : '';
+  const restHeaders = api.provider === 'rest' ? api.headers : undefined;
 
   const makeRestRequest = useCallback(
     (method: string, path: string, body?: BodyInit | Record<string, unknown>, options?: RequestInit) => {
@@ -430,7 +473,9 @@ export function YargramProvider({
         ...options,
         method,
         body: resolveBody(body),
-        headers: isJson ? { 'Content-Type': 'application/json', ...options?.headers } : options?.headers,
+        headers: isJson
+          ? mergeHeaders({ 'Content-Type': 'application/json', ...(restHeaders as any) }, options?.headers)
+          : mergeHeaders(restHeaders, options?.headers),
       };
       const requestStr =
         method === 'GET' || method === 'DELETE'
@@ -463,7 +508,7 @@ export function YargramProvider({
           throw err;
         });
     },
-    [restBaseUrl, addNetworkEntry]
+    [restBaseUrl, restHeaders, addNetworkEntry]
   );
 
   const wrappedRestApi = useMemo<RestApiContextValue>(
@@ -485,8 +530,9 @@ export function YargramProvider({
     if (api.provider !== 'graphql') return null;
     const clientOpt = api.client;
     if (clientOpt) return clientOpt as ApolloClientType<NormalizedCacheObject>;
+    const graphqlHeaders = api.headers;
     return new ApolloClient({
-      uri: graphqlUri || '/graphql',
+      link: new HttpLink({ uri: graphqlUri || '/graphql', headers: headersInitToRecord(graphqlHeaders) }),
       cache: new InMemoryCache(),
     });
   }, [api, graphqlUri]);
@@ -504,7 +550,12 @@ export function YargramProvider({
         const op = getOperationAST(options.query);
         const operationName = op?.name?.value ?? 'Query';
         return graphqlClient
-          .query(options as QueryOptions<OperationVariables, unknown>)
+          .query(
+            normalizeGraphqlOptions(options as YargramGraphqlQueryOptions<OperationVariables, unknown>) as QueryOptions<
+              OperationVariables,
+              unknown
+            >
+          )
           .then((result: any) => {
             addNetworkEntry({
               type: 'graphql',
@@ -538,7 +589,12 @@ export function YargramProvider({
         const op = getOperationAST(options.mutation);
         const operationName = op?.name?.value ?? 'Mutation';
         return graphqlClient
-          .mutate(options as MutationOptions<unknown, OperationVariables>)
+          .mutate(
+            normalizeGraphqlOptions(options as YargramGraphqlMutationOptions<unknown, OperationVariables>) as MutationOptions<
+              unknown,
+              OperationVariables
+            >
+          )
           .then((result: any) => {
             addNetworkEntry({
               type: 'graphql',
@@ -596,6 +652,7 @@ export function YargramProvider({
       logEntries,
       networkEntries,
       isLogWindowOpen,
+      publicKey,
     }),
     [
       addLogEntry,
@@ -605,6 +662,7 @@ export function YargramProvider({
       logEntries,
       networkEntries,
       isLogWindowOpen,
+      publicKey,
     ]
   );
 

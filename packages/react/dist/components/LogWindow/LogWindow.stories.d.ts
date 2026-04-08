@@ -6,7 +6,15 @@ type Story = StoryObj<typeof LogWindow>;
 export declare const Default: Story;
 export declare const InfoOnly: Story;
 export declare const ManyEntries: Story;
+/** 表示行数を 2 行に固定。スクロールで続きを表示 */
+export declare const VisibleRows2: Story;
+/** 表示行数を 3 行に固定 */
+export declare const VisibleRows3: Story;
+/** 表示行数を任意の数（例: 5 行）に指定 */
+export declare const VisibleRows5: Story;
 export declare const Empty: Story;
+/** 連想配列・配列はアコーディオンで展開・縮小表示 */
+export declare const ObjectAndArrayMessages: Story;
 export declare const NetworksTab: Story;
 /** Networks タブで REST API リクエストを表示 */
 export declare const NetworkREST: Story;

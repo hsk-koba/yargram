@@ -2,7 +2,7 @@ import { Fragment as _Fragment, jsx as _jsx, jsxs as _jsxs } from "react/jsx-run
 import { createContext, useContext, useState, useCallback, useMemo, useId, useRef, useEffect, } from 'react';
 import { createPortal } from 'react-dom';
 import { createPrinter } from '@yargram/core';
-import { ApolloClient, ApolloProvider, InMemoryCache, } from '@apollo/client';
+import { ApolloClient, ApolloProvider, InMemoryCache, HttpLink, } from '@apollo/client';
 import { getOperationAST, print } from 'graphql';
 import { ApiProvider, ApiContext } from './ApiContext';
 import { PrinterProvider } from './PrinterContext';
@@ -119,17 +119,37 @@ function resolveBody(body) {
     }
     return JSON.stringify(body);
 }
+function mergeHeaders(base, override) {
+    if (!base && !override)
+        return undefined;
+    const h = new Headers(base);
+    if (override) {
+        new Headers(override).forEach((value, key) => {
+            h.set(key, value);
+        });
+    }
+    return h;
+}
+function headersInitToRecord(headers) {
+    if (!headers)
+        return undefined;
+    const record = {};
+    new Headers(headers).forEach((value, key) => {
+        record[key] = value;
+    });
+    return record;
+}
 const YargramContext = createContext(null);
 /** 認証有効時の子要素ラッパー（ログアウトは LogWindow 内のボタンから行う） */
 function AuthEscapeToLogin({ children }) {
     return _jsx(_Fragment, { children: children });
 }
 /** 認証時はログウィンドウをポータル表示。未認証時は LogWindow 内にパスワード画面（production/staging のみ） */
-function LogWindowGate({ instanceId, defaultPosition, loginTitle, isAuthenticated, login, logout, loginError, clearLoginError, logEntries, networkEntries, isLogWindowOpen, closeLogWindow, }) {
+function LogWindowGate({ instanceId, defaultPosition, loginTitle, isAuthenticated, login, logout, loginError, clearLoginError, logEntries, networkEntries, isLogWindowOpen, closeLogWindow, logWindowConfig, }) {
     if (!isLogWindowOpen || typeof document === 'undefined') {
         return null;
     }
-    return createPortal(_jsx("div", { onClick: (e) => e.stopPropagation(), children: _jsx(LogWindow, { entries: logEntries, networkEntries: networkEntries, draggable: true, animateOnOpen: true, onClose: closeLogWindow, onLogout: isAuthenticated ? logout : undefined, defaultPosition: defaultPosition, showLogin: !isAuthenticated, loginTitle: loginTitle, onLogin: !isAuthenticated ? login : undefined, loginError: loginError, onClearLoginError: clearLoginError }, instanceId) }), document.body);
+    return createPortal(_jsx("div", { onClick: (e) => e.stopPropagation(), children: _jsx(LogWindow, { entries: logEntries, networkEntries: networkEntries, visibleRows: logWindowConfig?.visibleRows, draggable: true, animateOnOpen: true, onClose: closeLogWindow, onLogout: isAuthenticated ? logout : undefined, defaultPosition: defaultPosition, showLogin: !isAuthenticated, loginTitle: loginTitle, onLogin: !isAuthenticated ? login : undefined, loginError: loginError, onClearLoginError: clearLoginError }, instanceId) }), document.body);
 }
 function generateId() {
     return typeof crypto !== 'undefined' && crypto.randomUUID
@@ -211,17 +231,18 @@ export function YargramProvider({ children, api, printer = {}, logWindow, auth, 
     const env = printer.env ?? 'local';
     const wrappedPrinter = useMemo(() => {
         const base = createPrinter(env);
+        const toConsoleStr = (msg) => typeof msg === 'string' ? msg : JSON.stringify(msg);
         return {
             info: (msg) => {
-                base.info(msg);
+                base.info(toConsoleStr(msg));
                 addLogEntryRef.current({ level: 'info', message: msg, source: 'app' });
             },
             warn: (msg) => {
-                base.warn(msg);
+                base.warn(toConsoleStr(msg));
                 addLogEntryRef.current({ level: 'warn', message: msg, source: 'app' });
             },
             error: (msg) => {
-                base.error(msg);
+                base.error(toConsoleStr(msg));
                 addLogEntryRef.current({ level: 'error', message: msg, source: 'app' });
             },
         };
@@ -229,6 +250,7 @@ export function YargramProvider({ children, api, printer = {}, logWindow, auth, 
     const restBaseUrl = api.provider === 'rest'
         ? (api.baseUrl ?? (typeof process !== 'undefined' ? process.env?.ENDPOINT_URL : '') ?? '')
         : '';
+    const restHeaders = api.provider === 'rest' ? api.headers : undefined;
     const makeRestRequest = useCallback((method, path, body, options) => {
         const url = restBaseUrl + path;
         const isJson = body != null &&
@@ -239,7 +261,9 @@ export function YargramProvider({ children, api, printer = {}, logWindow, auth, 
             ...options,
             method,
             body: resolveBody(body),
-            headers: isJson ? { 'Content-Type': 'application/json', ...options?.headers } : options?.headers,
+            headers: isJson
+                ? mergeHeaders({ 'Content-Type': 'application/json', ...restHeaders }, options?.headers)
+                : mergeHeaders(restHeaders, options?.headers),
         };
         const requestStr = method === 'GET' || method === 'DELETE'
             ? `${method} ${path}`
@@ -269,7 +293,7 @@ export function YargramProvider({ children, api, printer = {}, logWindow, auth, 
             addEntry(0, 'Error', String(err?.message ?? err));
             throw err;
         });
-    }, [restBaseUrl, addNetworkEntry]);
+    }, [restBaseUrl, restHeaders, addNetworkEntry]);
     const wrappedRestApi = useMemo(() => ({
         provider: 'rest',
         get: (path, options) => makeRestRequest('GET', path, undefined, options),
@@ -286,8 +310,9 @@ export function YargramProvider({ children, api, printer = {}, logWindow, auth, 
         const clientOpt = api.client;
         if (clientOpt)
             return clientOpt;
+        const graphqlHeaders = api.headers;
         return new ApolloClient({
-            uri: graphqlUri || '/graphql',
+            link: new HttpLink({ uri: graphqlUri || '/graphql', headers: headersInitToRecord(graphqlHeaders) }),
             cache: new InMemoryCache(),
         });
     }, [api, graphqlUri]);
@@ -401,9 +426,9 @@ export function YargramProvider({ children, api, printer = {}, logWindow, auth, 
     const logWindowElement = !auth &&
         isLogWindowOpen &&
         typeof document !== 'undefined' &&
-        createPortal(_jsx("div", { onClick: (e) => e.stopPropagation(), children: _jsx(LogWindow, { entries: logEntries, networkEntries: networkEntries, draggable: true, animateOnOpen: true, onClose: closeLogWindow, defaultPosition: defaultLogWindowPosition }, instanceId) }), document.body);
+        createPortal(_jsx("div", { onClick: (e) => e.stopPropagation(), children: _jsx(LogWindow, { entries: logEntries, networkEntries: networkEntries, visibleRows: logWindow?.visibleRows, draggable: true, animateOnOpen: true, onClose: closeLogWindow, defaultPosition: defaultLogWindowPosition }, instanceId) }), document.body);
     const content = (_jsx(PrinterProvider, { env: env, printer: wrappedPrinter, children: apiElement }));
-    return (_jsxs(YargramContext.Provider, { value: yargramValue, children: [auth ? (_jsxs(_Fragment, { children: [_jsx(AuthEscapeToLogin, { children: content }), _jsx(LogWindowGate, { instanceId: instanceId, defaultPosition: defaultLogWindowPosition, loginTitle: typeof auth === 'object' ? auth.loginTitle : undefined, isAuthenticated: isAuthenticated, login: handleLogin, logout: logout, loginError: loginError, clearLoginError: clearLoginError, logEntries: logEntries, networkEntries: networkEntries, isLogWindowOpen: isLogWindowOpen, closeLogWindow: closeLogWindow })] })) : (content), logWindowElement] }));
+    return (_jsxs(YargramContext.Provider, { value: yargramValue, children: [auth ? (_jsxs(_Fragment, { children: [_jsx(AuthEscapeToLogin, { children: content }), _jsx(LogWindowGate, { instanceId: instanceId, defaultPosition: defaultLogWindowPosition, loginTitle: typeof auth === 'object' ? auth.loginTitle : undefined, isAuthenticated: isAuthenticated, login: handleLogin, logout: logout, loginError: loginError, clearLoginError: clearLoginError, logEntries: logEntries, networkEntries: networkEntries, isLogWindowOpen: isLogWindowOpen, closeLogWindow: closeLogWindow, logWindowConfig: logWindow })] })) : (content), logWindowElement] }));
 }
 export function useYargram() {
     const ctx = useContext(YargramContext);

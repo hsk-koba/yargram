@@ -23,11 +23,13 @@ type ApiProviderProps = {
     provider: 'rest';
     children: React.ReactNode;
     baseUrl?: string;
+    headers?: HeadersInit;
 } | {
     provider: 'graphql';
     children: React.ReactNode;
     uri?: string;
     client?: ApolloClientType<NormalizedCacheObject>;
+    headers?: HeadersInit;
 };
 export declare function ApiProvider(props: ApiProviderProps): import("react/jsx-runtime").JSX.Element;
 export declare function useApi(): ApiContextValue;

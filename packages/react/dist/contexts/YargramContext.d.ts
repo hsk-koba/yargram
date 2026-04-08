@@ -8,17 +8,22 @@ import '../components/LogWindow/LogWindow.css';
 type YargramApiConfig = {
     provider: 'rest';
     baseUrl?: string;
+    headers?: HeadersInit;
 } | {
     provider: 'graphql';
     uri?: string;
     client?: ApolloClient<NormalizedCacheObject>;
+    headers?: HeadersInit;
 };
 /** Printer 設定 */
 type YargramPrinterConfig = {
     env?: Env;
 };
 /** LogWindow 設定（Escape 5 回で表示） */
-type YargramLogWindowConfig = Record<string, never>;
+type YargramLogWindowConfig = {
+    /** 表示する行数（2, 3 など）。未指定時はウィンドウのデフォルト高さ */
+    visibleRows?: number;
+};
 /** 認証設定。本番のみログインを要求する場合は true、カスタム時はオブジェクト */
 type YargramAuthConfig = true | {
     /** 本番時のみ認証（デフォルト true） */

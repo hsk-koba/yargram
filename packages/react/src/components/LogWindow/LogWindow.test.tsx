@@ -45,7 +45,7 @@ describe('LogWindow', () => {
     render(
       <LogWindow showLogin loginTitle="Sign in" onLogin={onLogin} />
     );
-    expect(screen.getByPlaceholderText('••••••••')).toBeInTheDocument();
+    expect(screen.getByLabelText(/private key/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /log in/i })).toBeInTheDocument();
     expect(screen.getAllByText('Sign in').length).toBeGreaterThan(0);
   });

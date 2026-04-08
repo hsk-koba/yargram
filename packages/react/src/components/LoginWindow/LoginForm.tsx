@@ -2,8 +2,17 @@ import React, { useState, useCallback } from 'react';
 import { Lock, LogIn } from 'lucide-react';
 import './LoginWindow.css';
 
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read file.'));
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.readAsText(file);
+  });
+}
+
 export type LoginFormProps = {
-  onLogin: (password: string) => Promise<void>;
+  onLogin: (pem: string) => Promise<void>;
   title?: string;
   submitLabel?: string;
   errorMessage?: string;
@@ -18,25 +27,24 @@ export function LoginForm({
   errorMessage,
   onClearError,
 }: LoginFormProps) {
-  const [password, setPassword] = useState('');
+  const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
       onClearError?.();
-      if (!password) return;
+      if (!file) return;
       setIsSubmitting(true);
-      onLogin(password)
-        .then(() => {
-          setPassword('');
-        })
+      readFileAsText(file)
+        .then((pem) => onLogin(pem))
+        .then(() => setFile(null))
         .catch(() => {})
         .finally(() => {
           setIsSubmitting(false);
         });
     },
-    [onLogin, password, onClearError]
+    [onLogin, file, onClearError]
   );
 
   return (
@@ -50,24 +58,22 @@ export function LoginForm({
       <form onSubmit={handleSubmit} className="loginWindowForm">
         <label className="loginWindowLabel">
           <Lock size={16} className="loginWindowLabelIcon" aria-hidden />
-          <span>Password</span>
+          <span>Private key</span>
           <input
-            type="password"
+            type="file"
             className="loginWindowInput"
-            value={password}
+            accept=".pem,.key"
             onChange={(e) => {
-              setPassword(e.target.value);
+              setFile(e.target.files?.[0] ?? null);
               onClearError?.();
             }}
-            autoComplete="current-password"
-            placeholder="••••••••"
             disabled={isSubmitting}
           />
         </label>
         <button
           type="submit"
           className="loginWindowSubmit"
-          disabled={isSubmitting || !password}
+          disabled={isSubmitting || !file}
         >
           <LogIn size={16} aria-hidden />
           {isSubmitting ? '...' : submitLabel}

@@ -12,6 +12,8 @@ export type LogWindowProps = {
     onTabChange?: (tab: LogWindowTab) => void;
     /** 高さ（CSS 値）。未指定時は max-height: 320px */
     height?: string | number;
+    /** 表示する行数（2, 3 など）。指定時はボディ高さを行数に合わせる。height より優先 */
+    visibleRows?: number;
     className?: string;
     /** true のときヘッダーをドラッグしてウィンドウを移動できる */
     draggable?: boolean;
@@ -37,5 +39,5 @@ export type LogWindowProps = {
     /** ログインエラーをクリア */
     onClearLoginError?: () => void;
 };
-export declare function LogWindow({ entries, networkEntries, defaultTab, onTabChange, height, className, draggable, defaultPosition, animateOnOpen, onClose, onLogout, showLogin, loginTitle, onLogin, loginError, onClearLoginError, }: LogWindowProps): import("react/jsx-runtime").JSX.Element;
+export declare function LogWindow({ entries, networkEntries, defaultTab, onTabChange, height, visibleRows, className, draggable, defaultPosition, animateOnOpen, onClose, onLogout, showLogin, loginTitle, onLogin, loginError, onClearLoginError, }: LogWindowProps): import("react/jsx-runtime").JSX.Element;
 //# sourceMappingURL=LogWindow.d.ts.map

@@ -45,12 +45,12 @@ export type LogWindowProps = {
   onClose?: () => void;
   /** 指定時はヘッダーにログアウトボタンを表示（認証連携用） */
   onLogout?: () => void;
-  /** true のときボディにパスワード（ログイン）画面を表示（production/staging 用） */
+  /** true のときボディに秘密鍵（ログイン）画面を表示（production/staging 用） */
   showLogin?: boolean;
   /** ログイン画面のタイトル */
   loginTitle?: string;
   /** ログイン送信 */
-  onLogin?: (password: string) => Promise<void>;
+  onLogin?: (pem: string) => Promise<void>;
   /** ログイン失敗メッセージ */
   loginError?: string;
   /** ログインエラーをクリア */

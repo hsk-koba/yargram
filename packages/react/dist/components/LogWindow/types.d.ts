@@ -1,8 +1,10 @@
 export type LogLevel = 'info' | 'warn' | 'error';
+/** ログメッセージ（文字列のほか、連想配列・配列の場合はアコーディオンで展開表示） */
+export type LogMessage = string | Record<string, unknown> | unknown[];
 export type LogEntry = {
     id: string;
     level: LogLevel;
-    message: string;
+    message: LogMessage;
     source: string;
 };
 export type LogWindowTab = 'logs' | 'networks';

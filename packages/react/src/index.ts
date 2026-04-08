@@ -12,3 +12,10 @@ export { usePrinter } from './contexts/PrinterContext';
 export { YargramProvider, useYargram } from './contexts/YargramContext';
 export type { YargramProviderProps } from './contexts/YargramContext';
 export { gql } from '@apollo/client';
+
+export {
+  base64ToArrayBuffer,
+  importPrivateKey,
+  decryptData,
+  decryptText,
+} from './crypto';

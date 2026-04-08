@@ -125,9 +125,62 @@ export const ManyEntries = {
         height: 280,
     },
 };
+/** 表示行数を 2 行に固定。スクロールで続きを表示 */
+export const VisibleRows2 = {
+    args: {
+        entries: [
+            ...sampleEntries,
+            { id: '4', level: 'info', message: 'Fetching data...', source: 'useApi.ts:18' },
+            { id: '5', level: 'warn', message: 'Deprecated API used', source: 'legacy.ts:3' },
+        ],
+        visibleRows: 2,
+    },
+};
+/** 表示行数を 3 行に固定 */
+export const VisibleRows3 = {
+    args: {
+        entries: [
+            ...sampleEntries,
+            { id: '4', level: 'info', message: 'Fetching data...', source: 'useApi.ts:18' },
+        ],
+        visibleRows: 3,
+    },
+};
+/** 表示行数を任意の数（例: 5 行）に指定 */
+export const VisibleRows5 = {
+    args: {
+        entries: [
+            ...sampleEntries,
+            { id: '4', level: 'info', message: 'Fetching data...', source: 'useApi.ts:18' },
+            { id: '5', level: 'warn', message: 'Deprecated API used', source: 'legacy.ts:3' },
+            { id: '6', level: 'error', message: 'Network request failed', source: 'api.ts:92' },
+        ],
+        visibleRows: 5,
+    },
+};
 export const Empty = {
     args: {
         entries: [],
+    },
+};
+/** 連想配列・配列はアコーディオンで展開・縮小表示 */
+export const ObjectAndArrayMessages = {
+    args: {
+        entries: [
+            { id: '1', level: 'info', message: 'Plain string message', source: 'App.tsx:1' },
+            {
+                id: '2',
+                level: 'info',
+                message: { name: 'Alice', age: 30, tags: ['admin', 'user'] },
+                source: 'App.tsx:2',
+            },
+            {
+                id: '3',
+                level: 'warn',
+                message: [{ id: 1, title: 'First' }, { id: 2, title: 'Second' }],
+                source: 'App.tsx:3',
+            },
+        ],
     },
 };
 export const NetworksTab = {

@@ -1,8 +1,11 @@
 {
   "name": "@yargram/react",
-  "version": "1.0.3",
+  "version": "2.0.0",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "bin": {
+    "yargram-keys": "./bin/yargram-keys.js"
+  },
   "exports": {
     ".": {
       "types": "./src/index.ts",
